@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.express as px
+import plotly.graph_objects as go
 import datetime
 
 # Investment data
@@ -45,41 +46,60 @@ def calculate_portfolio(investment_data):
             'total_invested': total_invested,
             'current_price': current_price,
             'current_value': current_value,
-            'gain_loss': (current_value - total_invested) / total_invested * 100
+            'gain_loss': ((current_value - total_invested) / total_invested) * 100
         }
         total_cost += total_invested
         total_value += current_value
     portfolio['total_cost'] = total_cost
     portfolio['total_value'] = total_value
-    portfolio['total_gain_loss'] = (total_value - total_cost) / total_cost * 100
+    portfolio['total_gain_loss'] = ((total_value - total_cost) / total_cost) * 100
     return portfolio
 
 # Function to display the dashboard
 def display_dashboard(portfolio):
     st.title("Investment Dashboard")
 
-    # Line Chart for Historical Performance
+    # Line Chart for Historical Performance with Buy Markers
     st.subheader("Historical Performance")
     historical_data = {}
+    buy_markers = []
     for ticker in investment_data.keys():
         stock = yf.Ticker(ticker)
         hist = stock.history(period="1y")
         historical_data[ticker] = hist['Close']
-    historical_df = pd.DataFrame(historical_data)
-    st.line_chart(historical_df)
+        for item in investment_data[ticker]:
+            buy_markers.append(go.Scatter(
+                x=[item['date']],
+                y=[hist.loc[item['date']]['Close']],
+                mode='markers',
+                marker=dict(size=10, color='red'),
+                name=f'Buy {ticker}'
+            ))
 
-    # Pie Chart for Asset Allocation
-    st.subheader("Asset Allocation")
-    allocations = {ticker: data['current_value'] for ticker, data in portfolio.items() if ticker not in ['total_cost', 'total_value', 'total_gain_loss']}
-    allocation_df = pd.DataFrame(list(allocations.items()), columns=['Ticker', 'Value'])
-    fig = px.pie(allocation_df, names='Ticker', values='Value', title='Asset Allocation')
+    historical_df = pd.DataFrame(historical_data)
+    fig = px.line(historical_df, title='Historical Performance')
+    for marker in buy_markers:
+        fig.add_trace(marker)
     st.plotly_chart(fig)
 
-    # Bar Chart for Individual Asset Performance
-    st.subheader("Individual Asset Performance")
-    performance_data = {ticker: data['gain_loss'] for ticker, data in portfolio.items() if ticker not in ['total_cost', 'total_value', 'total_gain_loss']}
-    performance_df = pd.DataFrame(list(performance_data.items()), columns=['Ticker', 'Gain/Loss (%)'])
-    st.bar_chart(performance_df)
+    # Compact Layout for Graphs
+    col1, col2 = st.columns(2)
+
+    with col1:
+        # Pie Chart for Asset Allocation
+        st.subheader("Asset Allocation")
+        allocations = {ticker: data['current_value'] for ticker, data in portfolio.items() if ticker not in ['total_cost', 'total_value', 'total_gain_loss']}
+        allocation_df = pd.DataFrame(list(allocations.items()), columns=['Ticker', 'Value'])
+        fig = px.pie(allocation_df, names='Ticker', values='Value', title='Asset Allocation')
+        st.plotly_chart(fig)
+
+    with col2:
+        # Bar Chart for Individual Asset Performance
+        st.subheader("Individual Asset Performance")
+        performance_data = {ticker: data['gain_loss'] for ticker, data in portfolio.items() if ticker not in ['total_cost', 'total_value', 'total_gain_loss']}
+        performance_df = pd.DataFrame(list(performance_data.items()), columns=['Ticker', 'Gain/Loss (%)'])
+        fig = px.bar(performance_df, x='Ticker', y='Gain/Loss (%)', title='Individual Asset Performance')
+        st.plotly_chart(fig)
 
     # Table for Detailed Breakdown
     st.subheader("Detailed Breakdown")
@@ -90,9 +110,9 @@ def display_dashboard(portfolio):
         detailed_data.append({
             'Ticker': ticker,
             'Total Shares': data['total_shares'],
-            'Total Invested (USD)': data['total_invested'],
-            'Current Price (USD)': data['current_price'],
-            'Current Value (USD)': data['current_value'],
+            'Total Invested': data['total_invested'],
+            'Current Price': data['current_price'],
+            'Current Value': data['current_value'],
             'Gain/Loss (%)': data['gain_loss']
         })
     detailed_df = pd.DataFrame(detailed_data)
